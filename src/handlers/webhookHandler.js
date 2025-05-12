@@ -5,6 +5,8 @@ const { verifyWebhookSignature } = require('../utils/security');
  * Handles GitHub webhook events
  */
 async function webhookHandler(req, res) {
+  console.log('Webhook received:', req.headers['x-github-event']);
+  console.log('Payload:', JSON.stringify(req.body, null, 2).substring(0, 500) + '...');
   try {
     // Verify webhook signature
     if (!verifyWebhookSignature(req)) {

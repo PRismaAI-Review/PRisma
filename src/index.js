@@ -9,8 +9,26 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(bodyParser.json());
 
+app.use(bodyParser.json({
+  limit: '10mb'
+}));
+app.use(bodyParser.urlencoded({
+  limit: '10mb',
+  extended: true
+}));
+
+// In src/index.js
+app.get('/', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok',
+    message: 'PRisma is running. Use /webhook endpoint for GitHub webhook events.'
+  });
+});
+
+
 // Routes
 app.post('/webhook', webhookHandler);
+
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -23,3 +41,4 @@ app.listen(PORT, () => {
 });
 // Test webhook
 // Test webhook
+// Test comment for PRisma webhook

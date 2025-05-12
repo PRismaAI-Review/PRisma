@@ -4,9 +4,14 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 /**
+ * Sleep function to wait between retries
+ */
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
  * Analyzes code with Gemini AI
  */
-async function analyzeCodeWithGemini(diff, pullRequest) {
+async function analyzeCodeWithGemini(diff, pullRequest, retries = 3, initialDelay = 60000) {
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
     
@@ -60,6 +65,25 @@ Format your response as JSON with the following structure:
       throw new Error('Failed to parse AI response as JSON');
     }
   } catch (error) {
+    // Handle rate limit errors with retry logic
+    if (error.message.includes('429 Too Many Requests') && retries > 0) {
+      // Extract retry delay from error message if available
+      let retryDelay = initialDelay;
+      const retryDelayMatch = error.message.match(/"retryDelay":"(\d+)s"/);
+      if (retryDelayMatch && retryDelayMatch[1]) {
+        // Add a buffer to the suggested retry delay
+        retryDelay = (parseInt(retryDelayMatch[1]) + 10) * 1000;
+      }
+      
+      console.log(`Rate limited by Gemini API. Retrying in ${retryDelay/1000} seconds... (${retries} retries left)`);
+      
+      // Wait for the specified delay
+      await sleep(retryDelay);
+      
+      // Retry with exponential backoff
+      return analyzeCodeWithGemini(diff, pullRequest, retries - 1, retryDelay * 2);
+    }
+    
     console.error('Error analyzing code with Gemini:', error);
     throw error;
   }

@@ -1,4 +1,4 @@
-const { fetchPullRequestDiff, postReviewComments } = require('./githubService');
+const { fetchPullRequestDiff, postReviewComments, postPullRequestComment } = require('./githubService');
 const { analyzeCodeWithGemini } = require('./aiService');
 
 /**
@@ -16,13 +16,27 @@ async function processPullRequest(payload) {
     // Step 1: Fetch PR diff and metadata
     const diff = await fetchPullRequestDiff(repoOwner, repoName, prNumber);
     
-    // Step 2: Analyze with AI
-    const aiAnalysis = await analyzeCodeWithGemini(diff, payload.pull_request);
-    
-    // Step 3: Post review comments
-    await postReviewComments(repoOwner, repoName, prNumber, aiAnalysis);
-    
-    console.log(`Successfully processed PR #${prNumber}`);
+    try {
+      // Step 2: Analyze with AI
+      const aiAnalysis = await analyzeCodeWithGemini(diff, payload.pull_request);
+      
+      // Step 3: Post review comments
+      await postReviewComments(repoOwner, repoName, prNumber, aiAnalysis);
+      
+      console.log(`Successfully processed PR #${prNumber}`);
+    } catch (error) {
+      if (error.message && error.message.includes('rate limit')) {
+        console.log('Rate limit reached, posting fallback comment');
+        await postPullRequestComment(
+          repoOwner,
+          repoName,
+          prNumber,
+          '⚠️ **Rate Limit Notice**: PRisma is currently rate limited by the Gemini API. Your PR will be analyzed when capacity becomes available. Thank you for your patience!'
+        );
+      } else {
+        throw error;
+      }
+    }
   } catch (error) {
     console.error('Error processing pull request:', error);
     throw error;

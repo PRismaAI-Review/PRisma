@@ -13,7 +13,7 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
  */
 async function analyzeCodeWithGemini(diff, pullRequest, retries = 3, initialDelay = 60000) {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
     
     // Construct the prompt
     const prompt = `

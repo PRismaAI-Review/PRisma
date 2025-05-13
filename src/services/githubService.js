@@ -30,16 +30,58 @@ async function fetchPullRequestDiff(owner, repo, prNumber) {
 }
 
 /**
+ * Posts a simple comment on a pull request
+ */
+async function postPullRequestComment(owner, repo, prNumber, body) {
+  try {
+    await githubClient.post(
+      `/repos/${owner}/${repo}/issues/${prNumber}/comments`,
+      { body }
+    );
+  } catch (error) {
+    console.error('Error posting PR comment:', error);
+    throw error;
+  }
+}
+
+/**
  * Posts review comments to GitHub
  */
 async function postReviewComments(owner, repo, prNumber, analysis) {
   try {
-    // Create a new review
+    // If there are no valid comments, post a simple PR comment instead
+    if (!analysis.comments || analysis.comments.length === 0) {
+      return await postPullRequestComment(
+        owner, 
+        repo, 
+        prNumber, 
+        analysis.summary || 'PRisma AI Review'
+      );
+    }
+    
+    // Ensure all comments have valid positions
+    const validComments = analysis.comments.filter(comment => 
+      comment.file && 
+      typeof comment.position === 'number' && 
+      !isNaN(comment.position)
+    );
+    
+    // If no valid comments remain, post a simple PR comment
+    if (validComments.length === 0) {
+      return await postPullRequestComment(
+        owner, 
+        repo, 
+        prNumber, 
+        analysis.summary || 'PRisma AI Review'
+      );
+    }
+    
+    // Create a new review with valid comments
     const review = {
       commit_id: analysis.commitId,
       body: analysis.summary || 'PRisma AI Review',
       event: 'COMMENT',
-      comments: analysis.comments.map(comment => ({
+      comments: validComments.map(comment => ({
         path: comment.file,
         position: comment.position,
         body: comment.body
@@ -58,5 +100,6 @@ async function postReviewComments(owner, repo, prNumber, analysis) {
 
 module.exports = {
   fetchPullRequestDiff,
-  postReviewComments
+  postReviewComments,
+  postPullRequestComment
 };

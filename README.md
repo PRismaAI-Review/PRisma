@@ -97,3 +97,5 @@ To get started with your project:
 
 ```bash
 npm install
+
+- deployed for free on Render

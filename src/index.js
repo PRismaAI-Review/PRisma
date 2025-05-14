@@ -1,4 +1,10 @@
 require('dotenv').config({ path: './config.env' });
+console.log('Environment variables loaded:');
+console.log('GITHUB_TOKEN:', process.env.GITHUB_TOKEN ? 'Set' : 'Not set');
+console.log('GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? 'Set' : 'Not set');
+console.log('WEBHOOK_SECRET:', process.env.WEBHOOK_SECRET ? 'Set' : 'Not set');
+
+
 const express = require('express');
 const bodyParser = require('body-parser');
 const webhookHandler = require('./handlers/webhookHandler');

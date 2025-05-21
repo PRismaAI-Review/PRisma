@@ -58,6 +58,10 @@ async function postReviewComments(owner, repo, prNumber, analysis) {
         `**PRisma Test Instructions:**\n\n${analysis.testInstructions}`
       );
     }
+
+    if (!analysis.testInstructions) {
+      analysis.testInstructions = "No specific test instructions provided.";
+    }
     
     // If there are no valid comments, post a simple PR comment instead
     if (!analysis.comments || analysis.comments.length === 0) {

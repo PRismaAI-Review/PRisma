@@ -20,7 +20,7 @@ async function analyzeCodeWithGemini(diff, pullRequest, retries = 3, initialDela
       });
 
       // Construct the prompt
-      const prompt = `
+const prompt = `
 Prisma: AI-Powered Pull Request Reviewer
 
 You are Prisma, an intelligent AI pull request reviewer. Analyze the provided
@@ -29,6 +29,9 @@ GitHub PR diff for:
 ● Deviations from best practices.
 ● Find security vulnerabilities.
 ● Recommendations for improved, more maintainable code.
+
+IMPORTANT: Always include test instructions as the first comment in your response.
+These instructions should explain how to test the changes in this PR.
 
 Present your findings in a structured manner, including:
 1. File and line number.
@@ -43,17 +46,19 @@ ${diff}
 
 Format your response as JSON with the following structure:
 {
-"summary": "Overall summary of the PR",
-"commitId": "${pullRequest.head.sha}",
-"comments": [
-  {
-    "file": "path/to/file",
-    "position": line_number,
-    "body": "Your comment with issue and suggestion"
-  }
-]
+  "summary": "Overall summary of the PR",
+  "commitId": "${pullRequest.head.sha}",
+  "testInstructions": "Detailed instructions on how to test this PR",
+  "comments": [
+    {
+      "file": "path/to/file",
+      "position": line_number,
+      "body": "Your comment with issue and suggestion"
+    }
+  ]
 }
 `;
+
 
       const result = await model.generateContent(prompt);
       const response = result.response;
@@ -63,25 +68,31 @@ Format your response as JSON with the following structure:
       const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) ||
           text.match(/\{[\s\S]*\}/);
 
-      if (jsonMatch) {
-          const analysis = JSON.parse(jsonMatch[1] || jsonMatch[0]);
-
-          // Prefix all comments with "PRisma bot:"
-          if (analysis.comments && analysis.comments.length > 0) {
-              analysis.comments.forEach(comment => {
-                  comment.body = `**PRisma bot:** ${comment.body}`;
-              });
-          }
-
-          // Also prefix the summary
-          if (analysis.summary) {
-              analysis.summary = `**PRisma bot Review Summary:**\n\n${analysis.summary}`;
-          }
-
-          return analysis;
-      } else {
-          throw new Error('Failed to parse AI response as JSON');
-      }
+      // In the analyzeCodeWithGemini function, after parsing the JSON:
+if (jsonMatch) {
+    const analysis = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+  
+    // Prefix all comments with "PRisma bot:"
+    if (analysis.comments && analysis.comments.length > 0) {
+      analysis.comments.forEach(comment => {
+        comment.body = `${comment.body}`;
+      });
+    }
+  
+    // Also prefix the summary
+    if (analysis.summary) {
+      analysis.summary = ` Review Summary:**\n\n${analysis.summary}`;
+    }
+  
+    // Make sure testInstructions exists even if the AI didn't provide it
+    if (!analysis.testInstructions) {
+      analysis.testInstructions = "No specific test instructions provided.";
+    }
+  
+    return analysis;
+  } else {
+    throw new Error('Failed to parse AI response as JSON');
+  }
   } catch (error) {
       // Handle rate limit errors with retry logic
       if (error.message.includes('429 Too Many Requests') && retries > 0) {

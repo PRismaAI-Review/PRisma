@@ -1,39 +1,44 @@
 const { processPullRequest } = require('../services/pullRequestService');
-const { verifyWebhookSignature } = require('../utils/security');
+const crypto = require('crypto');
 
-/**
- * Handles GitHub webhook events
- */
-async function webhookHandler(req, res) {
-  console.log('Webhook received:', req.headers['x-github-event']);
-  console.log('Payload:', JSON.stringify(req.body, null, 2).substring(0, 500) + '...');
-  
+function webhookHandler(req, res) {
+  console.log('Webhook received at:', new Date().toISOString());
+  console.log('Event type:', req.headers['x-github-event']);
+  console.log('Delivery ID:', req.headers['x-github-delivery']);
+
   try {
-    // Verify webhook signature
-    // For development, you can temporarily disable this check
-    const isValidSignature = verifyWebhookSignature(req);
-    if (!isValidSignature) {
-      console.warn('Invalid webhook signature, but continuing for development purposes');
-      // For production, uncomment the next line:
-      // return res.status(401).json({ error: 'Invalid signature' });
-    }
-
     const event = req.headers['x-github-event'];
-    const payload = req.body;
-
-    // Only process pull request events
-    if (event === 'pull_request' && 
-        (payload.action === 'opened' || payload.action === 'synchronize')) {
+    console.log(`Webhook received: ${event}`);
+    
+    // Log a truncated version of the payload for debugging
+    console.log('Payload:', JSON.stringify(req.body, null, 2).substring(0, 500) + '...');
+    
+    // Verify webhook signature if secret is configured
+    if (process.env.WEBHOOK_SECRET) {
+      const signature = req.headers['x-hub-signature-256'];
+      const hmac = crypto.createHmac('sha256', process.env.WEBHOOK_SECRET);
+      const digest = 'sha256=' + hmac.update(JSON.stringify(req.body)).digest('hex');
       
-      // Process asynchronously to avoid blocking the response
-      processPullRequest(payload).catch(err => {
-        console.error('Error processing pull request:', err);
-      });
-      
-      res.status(202).json({ message: 'Processing pull request' });
-    } else {
-      res.status(200).json({ message: 'Event ignored' });
+      if (signature !== digest) {
+        console.log('Webhook signature verification failed');
+        return res.status(401).json({ error: 'Invalid signature' });
+      }
     }
+    
+    // Handle pull request events
+    if (event === 'pull_request' && 
+        (req.body.action === 'opened' || req.body.action === 'synchronize')) {
+      processPullRequest(req.body)
+        .then(() => {
+          console.log('Pull request processed successfully');
+        })
+        .catch(error => {
+          console.error('Error processing pull request:', error);
+        });
+    }
+    
+    // Always return 200 to acknowledge receipt
+    res.status(200).json({ status: 'ok' });
   } catch (error) {
     console.error('Webhook handler error:', error);
     res.status(500).json({ error: 'Internal server error' });

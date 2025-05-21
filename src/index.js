@@ -1,4 +1,5 @@
-require('dotenv').config({ path: './config.env' });
+require('dotenv').config();
+
 console.log('Environment variables loaded:');
 console.log('GITHUB_TOKEN:', process.env.GITHUB_TOKEN ? 'Set' : 'Not set');
 console.log('GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? 'Set' : 'Not set');
@@ -45,12 +46,3 @@ app.get('/health', (req, res) => {
 app.listen(PORT, () => {
   console.log(`PRisma server running on port ${PORT}`);
 });
-// Test webhook
-// Test webhook
-// Test comment for PRisma webhook
-// Test webhook
-// Test webhook
-// Test webhook
-// Test webhook
-// Test webhook
-// Test webhook

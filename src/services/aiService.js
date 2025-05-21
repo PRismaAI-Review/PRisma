@@ -75,7 +75,7 @@ if (jsonMatch) {
     // Prefix all comments with "PRisma bot:"
     if (analysis.comments && analysis.comments.length > 0) {
       analysis.comments.forEach(comment => {
-        comment.body = `**PRisma bot:** ${comment.body}`;
+        comment.body = `${comment.body}`;
       });
     }
   

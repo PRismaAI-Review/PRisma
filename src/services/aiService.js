@@ -75,13 +75,13 @@ if (jsonMatch) {
     // Prefix all comments with "PRisma bot:"
     if (analysis.comments && analysis.comments.length > 0) {
       analysis.comments.forEach(comment => {
-        comment.body = `**PRisma bot:** ${comment.body}`;
+        comment.body = `${comment.body}`;
       });
     }
   
     // Also prefix the summary
     if (analysis.summary) {
-      analysis.summary = `**PRisma bot Review Summary:**\n\n${analysis.summary}`;
+      analysis.summary = ` Review Summary:**\n\n${analysis.summary}`;
     }
   
     // Make sure testInstructions exists even if the AI didn't provide it

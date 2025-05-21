@@ -2,16 +2,9 @@ const { processPullRequest } = require('../services/pullRequestService');
 const crypto = require('crypto');
 
 function webhookHandler(req, res) {
-  console.log('Webhook received at:', new Date().toISOString());
-  console.log('Event type:', req.headers['x-github-event']);
-  console.log('Delivery ID:', req.headers['x-github-delivery']);
 
   try {
     const event = req.headers['x-github-event'];
-    console.log(`Webhook received: ${event}`);
-    
-    // Log a truncated version of the payload for debugging
-    console.log('Payload:', JSON.stringify(req.body, null, 2).substring(0, 500) + '...');
     
     // Verify webhook signature if secret is configured
     if (process.env.WEBHOOK_SECRET) {
@@ -20,7 +13,6 @@ function webhookHandler(req, res) {
       const digest = 'sha256=' + hmac.update(JSON.stringify(req.body)).digest('hex');
       
       if (signature !== digest) {
-        console.log('Webhook signature verification failed');
         return res.status(401).json({ error: 'Invalid signature' });
       }
     }

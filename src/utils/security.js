@@ -12,7 +12,6 @@ function verifyWebhookSignature(req) {
 
   const webhookSecret = process.env.WEBHOOK_SECRET;
   if (!webhookSecret) {
-    console.log("test...");
     console.error('WEBHOOK_SECRET environment variable is not set');
     return false;
   }

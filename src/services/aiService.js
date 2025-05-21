@@ -59,7 +59,6 @@ Format your response as JSON with the following structure:
 }
 `;
 
-
       const result = await model.generateContent(prompt);
       const response = result.response;
       const text = response.text();
@@ -67,12 +66,9 @@ Format your response as JSON with the following structure:
       // Extract JSON from the response
       const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) ||
           text.match(/\{[\s\S]*\}/);
-
-      // In the analyzeCodeWithGemini function, after parsing the JSON:
 if (jsonMatch) {
     const analysis = JSON.parse(jsonMatch[1] || jsonMatch[0]);
   
-    // Prefix all comments with "PRisma bot:"
     if (analysis.comments && analysis.comments.length > 0) {
       analysis.comments.forEach(comment => {
         comment.body = `${comment.body}`;
@@ -81,7 +77,7 @@ if (jsonMatch) {
   
     // Also prefix the summary
     if (analysis.summary) {
-      analysis.summary = `**PRisma bot Review Summary:**\n\n${analysis.summary}`;
+      analysis.summary = `**Review Summary:**\n\n${analysis.summary}`;
     }
   
     // Make sure testInstructions exists even if the AI didn't provide it

@@ -3,10 +3,9 @@ const axios = require('axios');
 
 async function testPostComment() {
   try {
-    // Replace these with your actual repository and PR details
     const owner = 'misstry';
     const repo = 'PRisma';
-    const prNumber = 1; // Replace with an actual PR number
+    const prNumber = 1;
     
     console.log(`Attempting to post a test comment to ${owner}/${repo}#${prNumber}`);
     

@@ -49,6 +49,16 @@ async function postPullRequestComment(owner, repo, prNumber, body) {
  */
 async function postReviewComments(owner, repo, prNumber, analysis) {
   try {
+    // First, post the test instructions as a separate comment if they exist
+    if (analysis.testInstructions) {
+      await postPullRequestComment(
+        owner,
+        repo,
+        prNumber,
+        `**PRisma Test Instructions:**\n\n${analysis.testInstructions}`
+      );
+    }
+    
     // If there are no valid comments, post a simple PR comment instead
     if (!analysis.comments || analysis.comments.length === 0) {
       return await postPullRequestComment(
@@ -97,6 +107,7 @@ async function postReviewComments(owner, repo, prNumber, analysis) {
     throw error;
   }
 }
+
 
 module.exports = {
   fetchPullRequestDiff,

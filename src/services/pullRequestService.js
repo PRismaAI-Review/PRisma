@@ -1,5 +1,7 @@
 const { fetchPullRequestDiff, postReviewComments, postPullRequestComment } = require('./githubService');
-const { analyzeCodeWithGemini } = require('./aiService');async function processPullRequest(payload) {
+const { analyzeCodeWithGemini } = require('./aiService');
+
+async function processPullRequest(payload) {
   try {
     const prNumber = payload.pull_request.number;
     const repoOwner = payload.repository.owner.login;
@@ -19,7 +21,7 @@ const { analyzeCodeWithGemini } = require('./aiService');async function processP
       const aiAnalysis = await analyzeCodeWithGemini(diff, payload.pull_request);
       console.log('Gemini analysis complete:', JSON.stringify(aiAnalysis, null, 2));
       
-      // Step 3: Post review comments
+      // Step 3: Post review comments (now includes test instructions as first comment)
       console.log('Posting review comments...');
       await postReviewComments(repoOwner, repoName, prNumber, aiAnalysis);
       
@@ -43,6 +45,7 @@ const { analyzeCodeWithGemini } = require('./aiService');async function processP
     throw error;
   }
 }
+
 
 module.exports = {
   processPullRequest

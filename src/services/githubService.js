@@ -55,7 +55,7 @@ async function postReviewComments(owner, repo, prNumber, analysis) {
         owner,
         repo,
         prNumber,
-        `**PRisma Test Instructions:**\n\n${analysis.testInstructions}`
+        `**Test Instructions:**\n\n${analysis.testInstructions}`
       );
     }
 

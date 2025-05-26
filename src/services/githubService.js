@@ -94,7 +94,7 @@ async function postReviewComments(owner, repo, prNumber, analysis) {
     const review = {
       commit_id: analysis.commitId,
       body: analysis.summary || 'PRisma AI Review',
-      event: 'COMMENT',
+      event: 'PENDING',
       comments: validComments.map(comment => ({
         path: comment.file,
         position: comment.position,

@@ -108,6 +108,9 @@ async function postReviewComments(owner, repo, prNumber, analysis) {
     );
   } catch (error) {
     console.error('Error posting review comments:', error);
+    if (error.response.data && error.response.data.errors) {
+      console.error('GitHub API detailed errors:', JSON.stringify(error.response.data.errors, null, 2));
+    }
     throw error;
   }
 }

@@ -1,5 +1,5 @@
 const axios = require('axios');
-const parseGitDiff = require('parse-git-diff');
+const gitdiffParser = require('gitdiff-parser'); // Use gitdiff-parser
 
 // GitHub API client (unchanged)
 const githubClient = axios.create({
@@ -63,7 +63,7 @@ async function postPullRequestInlineComment(owner, repo, prNumber, commitId, pat
       path: path,
       position: position,
       body: body,
-      diff_hunk: diffHunk
+      diff_hunk: diffHunk // <--- THIS IS THE NEW REQUIRED FIELD
     };
 
     console.log(`Attempting to post inline comment with payload for ${path}:${position}:`, JSON.stringify(payload, null, 2));
@@ -87,7 +87,7 @@ async function postPullRequestInlineComment(owner, repo, prNumber, commitId, pat
 /**
  * Posts review comments to GitHub by posting each as a separate inline comment.
  * Falls back to general PR comment if no valid inline comments or commit ID.
- * This version uses parse-git-diff to get correct positions and diff_hunks.
+ * This version uses gitdiff-parser to get correct positions and diff_hunks.
  */
 async function postReviewComments(owner, repo, prNumber, analysis) {
   try {
@@ -114,8 +114,10 @@ async function postReviewComments(owner, repo, prNumber, analysis) {
         prDiffContent = await fetchPullRequestDiff(owner, repo, prNumber);
         console.log('Fetched PR diff content. Length:', prDiffContent.length);
 
-        parsedDiff = parseGitDiff(prDiffContent); // Use parseGitDiff here
-        console.log(`Parsed diff: ${parsedDiff.files.length} files changed.`);
+        // Parse the diff content using gitdiff-parser
+        // gitdiff-parser returns an array of files, each with an array of hunks
+        parsedDiff = gitdiffParser.parse(prDiffContent);
+        console.log(`Parsed diff: ${parsedDiff.length} files changed.`);
 
     } catch (prError) {
         console.error('Error fetching PR details or diff for inline comments:', prError.message);
@@ -133,7 +135,7 @@ async function postReviewComments(owner, repo, prNumber, analysis) {
 
     // --- Step 3: Post the overall review summary as a general PR comment ---
     const reviewSummaryBody = analysis.summary && analysis.summary.trim() !== ""
-      ? `${analysis.summary}`
+      ? `**Review Summary:**\n\n${analysis.summary}`
       : 'PRisma AI Review: No specific summary provided.';
 
     await postPullRequestIssueComment(owner, repo, prNumber, reviewSummaryBody);
@@ -151,13 +153,13 @@ async function postReviewComments(owner, repo, prNumber, analysis) {
 
     await Promise.allSettled(commentsToMap.map(async (originalComment) => {
       let cleanedPath = originalComment.file;
-      // Remove common diff prefixes like 'a/' or 'b/'
+      // Remove common diff prefixes like 'a/' or 'b/' from the path
       if (cleanedPath && (cleanedPath.startsWith('a/') || cleanedPath.startsWith('b/'))) {
         cleanedPath = cleanedPath.substring(2);
       }
 
-      // Find the corresponding file in the parsed diff using the new library's structure
-      const fileDiff = parsedDiff.files.find(f =>
+      // Find the corresponding file in the parsed diff using gitdiff-parser's structure
+      const fileDiff = parsedDiff.find(f =>
           f.newPath === cleanedPath || f.oldPath === cleanedPath // Check both old and new paths
       );
 
@@ -170,21 +172,17 @@ async function postReviewComments(owner, repo, prNumber, analysis) {
       let targetDiffHunk = null;
 
       // Iterate through hunks and lines to find the correct diff position and hunk
-      // parse-git-diff stores lines directly in file.lines with 'type' and 'line' content
-      // and hunk data within file.hunks[i].lines
-      // The `raw` property of a hunk is what we'll use for diff_hunk
       for (const hunk of fileDiff.hunks) {
           let hunkLineCounter = 0; // This tracks position within the current hunk for GitHub's 'position'
 
-          // The `raw` property of the hunk contains the full hunk string including header
+          // gitdiff-parser provides the raw hunk string (including header) directly
           const fullDiffHunk = hunk.raw;
 
           for (const line of hunk.lines) {
               hunkLineCounter++; // Increment for each line in the hunk (this is the `position` for GitHub)
 
-              // Determine which absolute line number to match against
-              // parse-git-diff's 'line' object has 'oldLine' and 'newLine'
-              const absoluteLineToMatch = (line.type === 'added' || line.type === 'context') ? line.newLine : line.oldLine;
+              // gitdiff-parser's line object has 'oldLineno' and 'newLineno'
+              const absoluteLineToMatch = (line.type === 'added' || line.type === 'context') ? line.newLineno : line.oldLineno;
 
               // If the AI's original position matches an absolute line in this hunk
               if (absoluteLineToMatch === originalComment.position) {

@@ -1,7 +1,6 @@
 const axios = require('axios');
-const gitdiffParser = require('gitdiff-parser'); // Use gitdiff-parser
 
-// GitHub API client (unchanged)
+// GitHub API client
 const githubClient = axios.create({
   baseURL: 'https://api.github.com',
   headers: {
@@ -11,7 +10,7 @@ const githubClient = axios.create({
 });
 
 /**
- * Fetches the diff for a pull request (unchanged)
+ * Fetches the diff for a pull request
  */
 async function fetchPullRequestDiff(owner, repo, prNumber) {
   try {
@@ -19,11 +18,11 @@ async function fetchPullRequestDiff(owner, repo, prNumber) {
       `/repos/${owner}/${repo}/pulls/${prNumber}`,
       {
         headers: {
-          Accept: 'application/vnd.github.v3.diff' // Request the raw diff content
+          Accept: 'application/vnd.github.v3.diff'
         }
       }
     );
-    return response.data; // This will be the raw diff string
+    return response.data;
   } catch (error) {
     console.error('Error fetching PR diff:', error.message);
     if (error.response) {
@@ -54,23 +53,18 @@ async function postPullRequestIssueComment(owner, repo, prNumber, body) {
 
 /**
  * Posts an inline comment on a specific line of a file in a pull request diff.
- * This function now explicitly includes diff_hunk.
+ * This is different from a general PR comment.
  */
-async function postPullRequestInlineComment(owner, repo, prNumber, commitId, path, position, body, diffHunk) {
+async function postPullRequestInlineComment(owner, repo, prNumber, commitId, path, position, body) {
   try {
-    const payload = {
-      commit_id: commitId,
-      path: path,
-      position: position,
-      body: body,
-      diff_hunk: diffHunk // <--- THIS IS THE NEW REQUIRED FIELD
-    };
-
-    console.log(`Attempting to post inline comment with payload for ${path}:${position}:`, JSON.stringify(payload, null, 2));
-
     await githubClient.post(
       `/repos/${owner}/${repo}/pulls/${prNumber}/comments`,
-      payload
+      {
+        commit_id: commitId, // Needs the commit ID of the file being commented on
+        path: path,
+        position: position, // The line number in the diff, not the absolute file line
+        body: body
+      }
     );
     console.log(`Posted inline comment to PR #${prNumber} on file ${path} at position ${position}.`);
   } catch (error) {
@@ -81,13 +75,14 @@ async function postPullRequestInlineComment(owner, repo, prNumber, commitId, pat
         console.error('GitHub API detailed errors:', JSON.stringify(error.response.data.errors, null, 2));
       }
     }
+    // Don't throw here to allow other comments to potentially post
+    // If you want to stop on first error, re-enable throw.
   }
 }
 
 /**
  * Posts review comments to GitHub by posting each as a separate inline comment.
  * Falls back to general PR comment if no valid inline comments or commit ID.
- * This version uses gitdiff-parser to get correct positions and diff_hunks.
  */
 async function postReviewComments(owner, repo, prNumber, analysis) {
   try {
@@ -101,122 +96,72 @@ async function postReviewComments(owner, repo, prNumber, analysis) {
       );
     }
 
-    // --- Step 2: Get the latest commit_id and the full diff for the PR ---
+    // --- Step 2: Get the latest commit_id for the PR ---
+    // This is crucial for inline comments as well.
     let latestCommitId;
-    let prDiffContent;
-    let parsedDiff;
-
     try {
         const prDetailsResponse = await githubClient.get(`/repos/${owner}/${repo}/pulls/${prNumber}`);
         latestCommitId = prDetailsResponse.data.head.sha;
         console.log(`Workspaceed latest commit ID for PR #${prNumber}: ${latestCommitId}`);
-
-        prDiffContent = await fetchPullRequestDiff(owner, repo, prNumber);
-        console.log('Fetched PR diff content. Length:', prDiffContent.length);
-
-        // Parse the diff content using gitdiff-parser
-        // gitdiff-parser returns an array of files, each with an array of hunks
-        parsedDiff = gitdiffParser.parse(prDiffContent);
-        console.log(`Parsed diff: ${parsedDiff.length} files changed.`);
-
     } catch (prError) {
-        console.error('Error fetching PR details or diff for inline comments:', prError.message);
+        console.error('Error fetching latest PR commit ID for inline comments:', prError.message);
         if (prError.response) {
             console.error('GitHub API Response (status %d):', prError.response.status, prError.response.data);
         }
-        console.warn('Could not fetch PR details/diff. Falling back to simple PR comment for review summary and skipping inline comments.');
+        // If we can't get the commit ID, we can't post inline comments.
+        console.warn('Could not fetch latest commit ID. Falling back to simple PR comment for review summary and skipping inline comments.');
         return await postPullRequestIssueComment(
             owner,
             repo,
             prNumber,
-            `PRisma AI Review (Summary):\n${analysis.summary || 'Review could not be posted due to an internal error fetching commit/diff details.'}`
+            `PRisma AI Review (Summary):\n${analysis.summary || 'Review could not be posted due to an internal error fetching commit details.'}`
         );
     }
 
     // --- Step 3: Post the overall review summary as a general PR comment ---
     const reviewSummaryBody = analysis.summary && analysis.summary.trim() !== ""
-      ? `**Review Summary:**\n\n${analysis.summary}`
+      ? `${analysis.summary}`
       : 'PRisma AI Review: No specific summary provided.';
 
     await postPullRequestIssueComment(owner, repo, prNumber, reviewSummaryBody);
     console.log(`Posted review summary to PR #${prNumber}.`);
 
     // --- Step 4: Post individual inline comments ---
-    const commentsToMap = analysis.comments || [];
+    const commentsToPost = analysis.comments || [];
 
-    if (commentsToMap.length === 0) {
+    if (commentsToPost.length === 0) {
       console.log('No inline comments to post.');
-      return;
+      return; // No inline comments, so we're done.
     }
 
-    console.log(`Attempting to post ${commentsToMap.length} inline comments...`);
+    console.log(`Attempting to post ${commentsToPost.length} inline comments...`);
 
-    await Promise.allSettled(commentsToMap.map(async (originalComment) => {
-      let cleanedPath = originalComment.file;
-      // Remove common diff prefixes like 'a/' or 'b/' from the path
+    // Use Promise.allSettled to allow some comments to fail without stopping others
+    await Promise.allSettled(commentsToPost.map(async (comment) => {
+      let cleanedPath = comment.file;
+      // Remove common diff prefixes like 'a/' or 'b/'
       if (cleanedPath && (cleanedPath.startsWith('a/') || cleanedPath.startsWith('b/'))) {
         cleanedPath = cleanedPath.substring(2);
       }
 
-      // Find the corresponding file in the parsed diff using gitdiff-parser's structure
-      const fileDiff = parsedDiff.find(f =>
-          f.newPath === cleanedPath || f.oldPath === cleanedPath // Check both old and new paths
-      );
+      // Ensure position is a number and not NaN
+      const position = typeof comment.position === 'number' && !isNaN(comment.position)
+        ? comment.position
+        : null;
 
-      if (!fileDiff) {
-        console.warn(`Skipping comment for file ${cleanedPath}: File not found in diff or not changed.`);
-        return;
-      }
-
-      let diffPosition = null;
-      let targetDiffHunk = null;
-
-      // Iterate through hunks and lines to find the correct diff position and hunk
-      for (const hunk of fileDiff.hunks) {
-          let hunkLineCounter = 0; // This tracks position within the current hunk for GitHub's 'position'
-
-          // gitdiff-parser provides the raw hunk string (including header) directly
-          const fullDiffHunk = hunk.raw;
-
-          for (const line of hunk.lines) {
-              hunkLineCounter++; // Increment for each line in the hunk (this is the `position` for GitHub)
-
-              // gitdiff-parser's line object has 'oldLineno' and 'newLineno'
-              const absoluteLineToMatch = (line.type === 'added' || line.type === 'context') ? line.newLineno : line.oldLineno;
-
-              // If the AI's original position matches an absolute line in this hunk
-              if (absoluteLineToMatch === originalComment.position) {
-                  diffPosition = hunkLineCounter;
-                  targetDiffHunk = fullDiffHunk;
-                  break; // Found the position, exit inner line loop
-              }
-          }
-          if (diffPosition !== null) break; // Found position, exit hunk loop
-      }
-
-      if (diffPosition === null || targetDiffHunk === null) {
-        console.warn(`Skipping comment for ${cleanedPath} at original line ${originalComment.position}: Could not find corresponding diff position or diff hunk.`);
-        return;
-      }
-
-      console.log(`Mapped ${cleanedPath}: original line ${originalComment.position} -> diff position ${diffPosition}`);
-      console.log(`Extracted diff_hunk for ${cleanedPath}:${originalComment.position}:\n${targetDiffHunk.substring(0, Math.min(targetDiffHunk.length, 200))}...`); // Log a snippet
-
-
-      // Only attempt to post if all required parameters are valid after mapping
-      if (cleanedPath && diffPosition !== null && originalComment.body && originalComment.body.trim() !== '' && targetDiffHunk) {
+      // Only attempt to post if path, position, and body are valid
+      if (cleanedPath && position !== null && comment.body && comment.body.trim() !== '') {
         await postPullRequestInlineComment(
           owner,
           repo,
           prNumber,
-          latestCommitId,
+          latestCommitId, // Use the dynamically fetched commit ID
           cleanedPath,
-          diffPosition, // Use the calculated diff position
-          originalComment.body,
-          targetDiffHunk // <--- Pass the extracted diff_hunk
+          position,
+          comment.body
         );
       } else {
-        console.warn(`Skipping invalid inline comment (after full mapping and validation): path=${cleanedPath}, position=${diffPosition}, body=${originalComment.body.substring(0, Math.min(originalComment.body.length, 50))}..., diffHunk present: ${!!targetDiffHunk}`);
+        console.warn(`Skipping invalid inline comment: path=${cleanedPath}, position=${position}, body=${comment.body}`);
       }
     }));
 
@@ -224,17 +169,11 @@ async function postReviewComments(owner, repo, prNumber, analysis) {
 
   } catch (error) {
     console.error('General error in postReviewComments (outside of specific API calls):', error.message);
-    if (error.response) {
-        console.error('GitHub API Response (status %d):', error.response.status, error.response.data);
-        if (error.response.data && error.response.data.errors) {
-            console.error('GitHub API detailed errors:', JSON.stringify(error.response.data.errors, null, 2));
-        }
-    }
   }
 }
 
 module.exports = {
   fetchPullRequestDiff,
-  postReviewComments,
-  postPullRequestIssueComment
+  postReviewComments, // This function now handles posting both general and inline comments
+  postPullRequestIssueComment // Renamed for clarity, can still be used directly
 };

@@ -120,7 +120,7 @@ async function postReviewComments(owner, repo, prNumber, analysis) {
 
     // --- Step 3: Post the overall review summary as a general PR comment ---
     const reviewSummaryBody = analysis.summary && analysis.summary.trim() !== ""
-      ? `**Review Summary:**\n\n${analysis.summary}`
+      ? `${analysis.summary}`
       : 'PRisma AI Review: No specific summary provided.';
 
     await postPullRequestIssueComment(owner, repo, prNumber, reviewSummaryBody);

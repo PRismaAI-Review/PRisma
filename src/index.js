@@ -28,7 +28,7 @@ app.get('/', (req, res) => {
 
 
 // Routes
-app.post('/webhook', webhookHandler);
+app.post('/webhook1', webhookHandler);
 
 
 // Health check endpoint
